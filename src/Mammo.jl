@@ -1,11 +1,17 @@
 module Mammo
 
-import Comodo
+using Comodo
+using FEBio
+using Statistics
 
-# export 
+# Include functions
+include("functions.jl")
 
 # Export imported modules for later possible use
 export Comodo
+export FEBio
 
-include("functions.jl")
+# Export functions
+export mammodir, breast_surface 
+
 end # module Mammo
