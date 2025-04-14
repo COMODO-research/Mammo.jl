@@ -1,0 +1,12 @@
+name = "Mammo"
+uuid = "709caf31-4153-4c51-aa35-6581ed24e2f6"
+authors = ["Kevin-Mattheus-Moerman <kevin.moerman@gmail.com>"]
+version = "0.1.0"
+
+[deps]
+Comodo = "59095408-2761-4f7a-bdc2-044e78630271"
+FEBio = "c57eab10-e7d7-41f3-9039-a27761009b26"
+
+[compat]
+Comodo = "1.0.1"
+FEBio = "0.1.0"

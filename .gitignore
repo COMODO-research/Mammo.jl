@@ -1,0 +1,8 @@
+# Ignore the temporary output folder 
+/assets/temp
+
+# Ignore the temporary output folder 
+/.vscode
+
+# Ignore Manifest file
+Manifest.toml
