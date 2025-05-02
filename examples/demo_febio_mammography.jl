@@ -8,6 +8,9 @@ using Random
 using Statistics
 using Mammo.FEBio
 using Printf 
+using Mammo.Comodo.GLMakie.Colors
+
+cAlpha = RGBA(1.0, 1.0, 1.0,0.5)
 
 # Example geometry for a sphere that is cut so some edges are boundary edges
 n = 3 # Number of refinement steps of the geodesic sphere
@@ -24,7 +27,7 @@ pointSpacing = mean(edgelengths(F1,V1))
 
 # Meshing with tetgen
 v_region = mean(V1)
-vol1 = 3.0* pointSpacing^3 / (6.0*sqrt(2.0)) # volume of theoretical perfect tetrahedron
+vol1 = 10.0* pointSpacing^3 / (6.0*sqrt(2.0)) # volume of theoretical perfect tetrahedron
 
 stringOpt = "paAqY"
 E,V,CE,Fb,Cb = tetgenmesh(F1,V1; facetmarkerlist=C1, V_regions=[v_region],region_vol=vol1, stringOpt)
@@ -59,8 +62,8 @@ indices_chest_nodes = unique(reduce(vcat,Fb[Cb .== 2]))
 
 Fb_contact = Fb[Cb.==1]
 
-compressionAngle = 45.0 * (pi/180)
-plateDisplacement_XYZ = Point{3,Float64}(0.0,0.0,20.0)
+compressionAngle = 0.0 * (pi/180)
+plateDisplacement_XYZ = Point{3,Float64}(0.0,0.0,25.0)
 Q_compression = RotXYZ(compressionAngle,0.0,0.0)
 V2 = [Q_compression*v for v in V2]
 V3 = [Q_compression*v for v in V3]
@@ -81,7 +84,7 @@ fric_coeff=0.1;
 
 
 # FEA control settings
-numTimeSteps=10 # Number of time steps desired
+numTimeSteps=20 # Number of time steps desired
 max_refs=50 # Max reforms
 max_ups=0 # Set to zero to use full-Newton iterations
 opt_iter=15 # Optimum number of iterations
@@ -424,26 +427,20 @@ CE_F = repeat(CE,inner=4)
 
 Fs,Vs = separate_vertices(F,V)
 CE_Vs = simplex2vertexdata(Fs,CE_F)
-M = GeometryBasics.Mesh(Vs,Fs)
 
 Fbs,Vbs = separate_vertices(Fb,V)
 Cbs = simplex2vertexdata(Fbs,Cb)
 
 fig = Figure(size=(1200,1200))
-ax1 = Axis3(fig[1, 1], aspect = :data, xlabel = "X", ylabel = "Y", zlabel = "Z", title = "face_type=:tri, n=0")
-hp2 = poly!(ax1,GeometryBasics.Mesh(Vbs,Fbs), strokewidth=1,color=Cbs, strokecolor=:black, shading = FastShading, transparency=false, colormap=cmap)
-# hp4 = scatter!(ax1, V1[indVertices_C1_1],markersize=25,color=:red)
-Colorbar(fig[1, 2], hp2)
-
-ax2 = Axis3(fig[1, 3], aspect = :data, xlabel = "X", ylabel = "Y", zlabel = "Z", title = "Cut mesh")
-hp2 = poly!(ax2,M, color=CE_Vs, shading = FastShading, transparency=false,strokecolor=:black,strokewidth=strokewidth, overdraw=false,colorrange = (1,2),colormap=cmap)
-hp3 = scatter!(ax2, V_p,markersize=15,color=:red)
-hp4 = scatter!(ax2, V_pc,markersize=10,color=:black)
-hp5 = lines!(ax2, V_pc,linewidth=2,color=:black)
-hp6 = poly!(ax2,GeometryBasics.Mesh(V,F2), strokewidth=1,color=:blue, strokecolor=:black, shading = FastShading, transparency=false)
-hp7 = poly!(ax2,GeometryBasics.Mesh(V,F3), strokewidth=1,color=:green, strokecolor=:black, shading = FastShading, transparency=false)
+ax1 = Axis3(fig[1, 1], aspect = :data, xlabel = "X", ylabel = "Y", zlabel = "Z", title = "Cut mesh")
+hp2 = poly!(ax1, GeometryBasics.Mesh(Vs,Fs), color=:white, shading = FastShading, transparency=false,strokecolor=:black,strokewidth=strokewidth, overdraw=false,colorrange = (1,2),colormap=cmap)
+hp3 = scatter!(ax1, V_p,markersize=15,color=:red)
+hp4 = scatter!(ax1, V_pc,markersize=10,color=:black)
+hp5 = lines!(ax1, V_pc,linewidth=2,color=:black)
+hp6 = poly!(ax1,GeometryBasics.Mesh(V,F2), strokewidth=0, color=cAlpha, strokecolor=:black, shading = FastShading, transparency=true)
+hp7 = poly!(ax1,GeometryBasics.Mesh(V,F3), strokewidth=0, color=cAlpha, strokecolor=:black, shading = FastShading, transparency=true)
 # normalplot(ax2,F2,V2)
-hp8 = scatter!(ax2, V[indices_chest_nodes],markersize=10,color=:black)
+hp8 = scatter!(ax1, V[indices_chest_nodes],markersize=10,color=:black)
 
 VE  = simplexcenter(E,V)
 ZE = [v[3] for v in VE]
@@ -453,7 +450,7 @@ zMin = minimum(Z)
 numSlicerSteps = 3*ceil(Int,(zMax-zMin)/mean(edgelengths(F,V)))
 
 stepRange = range(zMin,zMax,numSlicerSteps)
-hSlider = Slider(fig[2, 3], range = stepRange, startvalue = mean(stepRange),linewidth=30)
+hSlider = Slider(fig[2, 1], range = stepRange, startvalue = mean(stepRange),linewidth=30)
 
 on(hSlider.value) do z 
 
@@ -470,41 +467,41 @@ on(hSlider.value) do z
         Fs = Fs[indB]
         Cs = Cs[indB]
         Fs,Vs = separate_vertices(Fs,V)
-        CE_Vs = simplex2vertexdata(Fs,Cs)
-        Ms = GeometryBasics.Mesh(Vs,Fs)
-        hp2[1] = Ms
-        hp2.color = CE_Vs
+        CE_Vs = simplex2vertexdata(Fs,Cs)        
+        hp2[1] = GeometryBasics.Mesh(Vs,Fs)
+        # hp2.color = CE_Vs
     end
 
 end
 # hSlider.selected_index[]+=1
 slidercontrol(hSlider,ax2)
 
-hSlider = Slider(fig[2,4], range = incRange, startvalue = numInc-1,linewidth=30)
-
-nodalColor = lift(hSlider.value) do stepIndex
-    norm.(DD_disp[stepIndex].data)
-end
-
-M = lift(hSlider.value) do stepIndex    
-    return GeometryBasics.Mesh(V.+DD_disp[stepIndex].data,Fb)
-end
-
-titleString = lift(hSlider.value) do stepIndex
-  "Step: "*string(stepIndex)
-end
-
-ax3=Axis3(fig[1,4], aspect = :data, xlabel = "X", ylabel = "Y", zlabel = "Z", title = titleString)
+ax2=Axis3(fig[1,2], aspect = :data, xlabel = "X", ylabel = "Y", zlabel = "Z", title = "Step: 1")
 
 min_p = minp([minp(V) for V in VT])
 max_p = maxp([maxp(V) for V in VT])
 
-limits!(ax3, (min_p[1],max_p[1]), 
+limits!(ax2, (min_p[1],max_p[1]), 
             (min_p[2],max_p[2]), 
             (min_p[3],max_p[3]))
 
-hp=poly!(ax3,M, strokewidth=2,color=nodalColor, transparency=false, shading = FastShading, colormap = Reverse(:Spectral))#,colorrange=(0,sqrt(sum(displacement_prescribed.^2))))
-Colorbar(fig[1,5],hp.plots[1],label = "Displacement magnitude [mm]") 
+sliderInitialStep = 1
+hp21=poly!(ax2,GeometryBasics.Mesh(V,Fb), strokewidth=0,color=norm.(DD_disp[sliderInitialStep].data), transparency=false, shading = FastShading, colormap = Reverse(:Spectral))
+hp22=poly!(ax2,GeometryBasics.Mesh(V,F2), strokewidth=0,color=cAlpha, transparency=true, shading = FastShading)
+hp23=poly!(ax2,GeometryBasics.Mesh(V,F3), strokewidth=0,color=cAlpha, transparency=true, shading = FastShading)
+Colorbar(fig[1,3],hp21,label = "Displacement magnitude [mm]") 
+
+hSlider2 = Slider(fig[2,2], range = incRange, startvalue = sliderInitialStep,linewidth=30)
+
+on(hSlider2.value) do stepIndex
+    U = DD_disp[stepIndex].data  
+    VN = V .+ U
+    hp21[1] = GeometryBasics.Mesh(VN,Fb)
+    hp21.color = norm.(U)  
+    hp22[1] = GeometryBasics.Mesh(VN,F2)
+    hp23[1] = GeometryBasics.Mesh(VN,F3)
+    ax2.title = "Step: "*string(stepIndex)
+end
 
 slidercontrol(hSlider,ax3)
 
