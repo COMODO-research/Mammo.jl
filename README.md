@@ -1,4 +1,4 @@
 # Mammo.jl
 Mammo.jl
 
-![Example video](assets/mp4/Comodo_mammography.mp4)
+![Example animation](assets/img/Comodo_mammography.gif)
