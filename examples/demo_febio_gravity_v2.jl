@@ -194,7 +194,7 @@ Mesh_node = aen(febio_spec_node,"Mesh")
     # Elements
     Elements_node_1 = aen(Mesh_node,"Elements"; name="Part1", type="tet4")
     for (i,e) in enumerate(E)        
-        aen(Elements_node_1,"elem",join(map(string, e), ','); id = i)
+        aen(Elements_node_1,"elem", join([@sprintf("%i", j) for j ∈ e],','); id = i)     
     end
     
     MeshDomains_node = aen(febio_spec_node, "MeshDomains")
@@ -331,8 +331,6 @@ on(hSlider.value) do z
     end
 
 end
-# hSlider.selected_index[]+=1
-slidercontrol(hSlider,ax2)
 
 hSlider = Slider(fig[2,4], range = incRange, startvalue = numInc-1,linewidth=30)
 
@@ -359,7 +357,5 @@ limits!(ax3, (min_p[1],max_p[1]),
 
 hp=poly!(ax3,M, strokewidth=strokewidth,color=nodalColor, transparency=false, shading = FastShading, colormap = Reverse(:Spectral), depth_shift=Float32(0.0), stroke_depth_shift=depth_shift)#,colorrange=(0,sqrt(sum(displacement_prescribed.^2))))
 Colorbar(fig[1,5],hp.plots[1],label = "Displacement magnitude [mm]") 
-
-slidercontrol(hSlider,ax3)
 
 fig

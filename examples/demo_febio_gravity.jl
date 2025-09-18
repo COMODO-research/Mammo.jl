@@ -188,7 +188,7 @@ Mesh_node = aen(febio_spec_node,"Mesh")
     # Elements
     Elements_node_1 = aen(Mesh_node,"Elements"; name="Part1", type="tet4")
     for (i,e) in enumerate(E)        
-        aen(Elements_node_1,"elem",join(map(string, e), ','); id = i)
+        aen(Elements_node_1,"elem", join([@sprintf("%i", j) for j ∈ e],','); id = i)     
     end
     
     MeshDomains_node = aen(febio_spec_node, "MeshDomains")
@@ -261,19 +261,29 @@ end
 #######
 # Visualization
 
+strokewidth = 0.5
+cmap = Makie.Categorical(:Spectral) 
+depth_shift =Float32(-0.001)
+F = element2faces(E) # Triangular faces
+CE_F = repeat(CE,inner=4)
+
+Fs,Vs = separate_vertices(F,V)
+CE_Vs = simplex2vertexdata(Fs,CE_F)
+
+Fbs,Vbs = separate_vertices(Fb,V)
+Cbs = simplex2vertexdata(Fbs,Cb)
+
 fig = Figure(size=(1200,1200))
 ax1 = Axis3(fig[1, 1], aspect = :data, xlabel = "X", ylabel = "Y", zlabel = "Z", title = "face_type=:tri, n=0")
-hp2 = poly!(ax1,GeometryBasics.Mesh(Vbs,Fbs), strokewidth=1,color=Cbs, strokecolor=:black, shading = FastShading, transparency=false, colormap=cmap)
+hp2 = poly!(ax1,GeometryBasics.Mesh(Vbs,Fbs), strokewidth=strokewidth, color=Cbs, strokecolor=:black, shading = FastShading, transparency=false, colormap=cmap, depth_shift=Float32(0.0), stroke_depth_shift=depth_shift)
 # hp4 = scatter!(ax1, V1[indVertices_C1_1],markersize=25,color=:red)
 Colorbar(fig[1, 2], hp2)
 
 ax2 = Axis3(fig[1, 3], aspect = :data, xlabel = "X", ylabel = "Y", zlabel = "Z", title = "Cut mesh")
-hp2 = poly!(ax2,M, color=CE_Vs, shading = FastShading, transparency=false,strokecolor=:black,strokewidth=strokewidth, overdraw=false,colorrange = (1,2),colormap=cmap)
+hp2 = poly!(ax2,GeometryBasics.Mesh(Vs,Fs), color=CE_Vs, shading = FastShading, transparency=false, strokecolor=:black, strokewidth=strokewidth, overdraw=false, colorrange = (1,2), colormap=cmap, depth_shift=Float32(0.0), stroke_depth_shift=depth_shift)
 hp3 = scatter!(ax2, V_p,markersize=15,color=:red)
 hp4 = scatter!(ax2, V_pc,markersize=10,color=:black)
 hp5 = lines!(ax2, V_pc,linewidth=2,color=:black)
-hp6 = poly!(ax2,GeometryBasics.Mesh(V2,F2), strokewidth=1,color=:blue, strokecolor=:black, shading = FastShading, transparency=false)
-hp7 = poly!(ax2,GeometryBasics.Mesh(V3,F3), strokewidth=1,color=:green, strokecolor=:black, shading = FastShading, transparency=false)
 # normalplot(ax2,F2,V2)
 hp8 = scatter!(ax2, V[indices_chest_nodes],markersize=10,color=:black)
 
@@ -296,21 +306,17 @@ on(hSlider.value) do z
     else        
         hp2.visible=true
         Fs = element2faces(E[indShow])
-        Cs = repeat(CE[indShow],inner=4)
-        
+        Cs = repeat(CE[indShow],inner=4)        
         indB = boundaryfaceindices(Fs)        
         Fs = Fs[indB]
         Cs = Cs[indB]
         Fs,Vs = separate_vertices(Fs,V)
-        CE_Vs = simplex2vertexdata(Fs,Cs)
-        Ms = GeometryBasics.Mesh(Vs,Fs)
-        hp2[1] = Ms
+        CE_Vs = simplex2vertexdata(Fs,Cs)        
+        hp2[1] = GeometryBasics.Mesh(Vs,Fs)
         hp2.color = CE_Vs
     end
 
 end
-# hSlider.selected_index[]+=1
-slidercontrol(hSlider,ax2)
 
 hSlider = Slider(fig[2,4], range = incRange, startvalue = numInc-1,linewidth=30)
 
@@ -335,9 +341,7 @@ limits!(ax3, (min_p[1],max_p[1]),
             (min_p[2],max_p[2]), 
             (min_p[3],max_p[3]))
 
-hp=poly!(ax3,M, strokewidth=2,color=nodalColor, transparency=false, shading = FastShading, colormap = Reverse(:Spectral))#,colorrange=(0,sqrt(sum(displacement_prescribed.^2))))
+hp=poly!(ax3,M, strokewidth=strokewidth,color=nodalColor, transparency=false, shading = FastShading, colormap = Reverse(:Spectral), depth_shift=Float32(0.0), stroke_depth_shift=depth_shift)#,colorrange=(0,sqrt(sum(displacement_prescribed.^2))))
 Colorbar(fig[1,5],hp.plots[1],label = "Displacement magnitude [mm]") 
-
-slidercontrol(hSlider,ax3)
 
 fig
