@@ -76,11 +76,11 @@ F3 = [f.+length(V) for f in F3] # Offset indices
 append!(V,V3) # Add nodes
 
 # Contact parameters
-contactPenalty = 150.0;
+contactPenalty = 100.0;
 laugon = 0;
 minaug = 1;
 maxaug = 10;
-fric_coeff=0.1;
+fric_coeff = 0.1;
 
 
 # FEA control settings
@@ -94,18 +94,18 @@ dtmax=1.0/numTimeSteps  # Maximum time step size
 symmetric_stiffness=0 
 min_residual=1e-18
 
-material_type = "Ogden"#"Ogden unconstrained" #"neo-Hookean"
+material_type = "Ogden" #"neo-Hookean"
 
 if material_type == "neo-Hookean"
     E_youngs = 0.2e-3 # MPa
     ν = 0.49
 elseif material_type == "Ogden unconstrained"
-    bulkModulusFactor = 50.0
+    bulkModulusFactor = 100.0
     c1 = 0.2e-3/3.0 # Shear modulus like parameter, MPa
     m1 = 2 # Set non-linearity
     k = bulkModulusFactor*c1 # Bulk-modulus like parameter, MPa
 elseif material_type == "Ogden"
-    bulkModulusFactor = 50.0
+    bulkModulusFactor = 100.0
     c1 = 0.2e-3/3.0 # Shear modulus like parameter, MPa
     m1 = 2 # Set non-linearity
     k = bulkModulusFactor*c1 # Bulk-modulus like parameter, MPa
@@ -432,13 +432,13 @@ Fbs,Vbs = separate_vertices(Fb,V)
 Cbs = simplex2vertexdata(Fbs,Cb)
 
 fig = Figure(size=(1200,1200))
-ax1 = Axis3(fig[1, 1], aspect = :data, xlabel = "X", ylabel = "Y", zlabel = "Z", title = "Cut mesh")
-hp2 = poly!(ax1, GeometryBasics.Mesh(Vs,Fs), color=:white, shading = FastShading, transparency=false,strokecolor=:black,strokewidth=strokewidth, overdraw=false,colorrange = (1,2),colormap=cmap)
+ax1 = AxisGeom(fig[1, 1], title = "Cut mesh")
+hp2 = meshplot!(ax1, Fs, Vs, strokecolor=:black, strokewidth=strokewidth)
 hp3 = scatter!(ax1, V_p,markersize=15,color=:red)
 hp4 = scatter!(ax1, V_pc,markersize=10,color=:black)
 hp5 = lines!(ax1, V_pc,linewidth=2,color=:black)
-hp6 = poly!(ax1,GeometryBasics.Mesh(V,F2), strokewidth=0, color=cAlpha, strokecolor=:black, shading = FastShading, transparency=true)
-hp7 = poly!(ax1,GeometryBasics.Mesh(V,F3), strokewidth=0, color=cAlpha, strokecolor=:black, shading = FastShading, transparency=true)
+hp6 = meshplot!(ax1, F2, V, strokewidth=0, color=cAlpha, transparency=true)
+hp7 = meshplot!(ax1, F3, V, strokewidth=0, color=cAlpha, transparency=true)
 # normalplot(ax2,F2,V2)
 hp8 = scatter!(ax1, V[indices_chest_nodes],markersize=10,color=:black)
 
@@ -474,9 +474,9 @@ on(hSlider.value) do z
 
 end
 # hSlider.selected_index[]+=1
-slidercontrol(hSlider,ax2)
+slidercontrol(hSlider,ax1)
 
-ax2=Axis3(fig[1,2], aspect = :data, xlabel = "X", ylabel = "Y", zlabel = "Z", title = "Step: 1")
+ax2=AxisGeom(fig[1,2], title = "Step: 1")
 
 min_p = minp([minp(V) for V in VT])
 max_p = maxp([maxp(V) for V in VT])
@@ -486,9 +486,9 @@ limits!(ax2, (min_p[1],max_p[1]),
             (min_p[3],max_p[3]))
 
 sliderInitialStep = 1
-hp21=poly!(ax2,GeometryBasics.Mesh(V,Fb), strokewidth=0,color=norm.(DD_disp[sliderInitialStep].data), transparency=false, shading = FastShading, colormap = Reverse(:Spectral))
-hp22=poly!(ax2,GeometryBasics.Mesh(V,F2), strokewidth=0,color=cAlpha, transparency=true, shading = FastShading)
-hp23=poly!(ax2,GeometryBasics.Mesh(V,F3), strokewidth=0,color=cAlpha, transparency=true, shading = FastShading)
+hp21=meshplot!(ax2, Fb, V, strokewidth=0, color=norm.(DD_disp[sliderInitialStep].data), transparency=false, colormap = Reverse(:Spectral))
+hp22=meshplot!(ax2, F2, V, strokewidth=0, color=cAlpha, transparency=true)
+hp23=meshplot!(ax2, F3, V, strokewidth=0, color=cAlpha, transparency=true)
 Colorbar(fig[1,3],hp21,label = "Displacement magnitude [mm]") 
 
 hSlider2 = Slider(fig[2,2], range = incRange, startvalue = sliderInitialStep,linewidth=30)
@@ -503,6 +503,6 @@ on(hSlider2.value) do stepIndex
     ax2.title = "Step: "*string(stepIndex)
 end
 
-slidercontrol(hSlider,ax3)
+slidercontrol(hSlider,ax2)
 
 fig
