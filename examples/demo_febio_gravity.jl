@@ -9,6 +9,12 @@ using LinearAlgebra
 using Mammo.FEBio
 using Printf 
 
+# Visualization settings 
+GLMakie.closeall()
+strokewidth = 0.5
+cmap = Makie.Categorical(:Spectral) 
+
+
 # Example geometry for a sphere that is cut so some edges are boundary edges
 n = 3 # Number of refinement steps of the geodesic sphere
 r = 40.0 # hemisphere radius
@@ -19,29 +25,33 @@ h = r2/1.5
 sy = 1.0 # y-direction squeeze
 gravityShiftPercentage = 0.5; #Percentage shift due to gravity
 
-tissueDensity = 1.0e-9 #tonne/mm^3
-gravityConstant = 9.81*1e-3 #mm/s^2
-
 material_type = "Ogden unconstrained" #"neo-Hookean"
 
 if material_type == "neo-Hookean"
-    E_youngs = 0.2e-3 # MPa
+    E_youngs = 2e-3 # MPa
     ν = 0.49
 elseif material_type == "Ogden unconstrained"
     bulkModulusFactor = 100.0
-    c1 = 0.2e-3/3.0 # Shear modulus like parameter, MPa
+    c1 = 2e-3/3.0 # Shear modulus like parameter, MPa
     m1 = 2 # Set non-linearity
     k = bulkModulusFactor*c1 # Bulk-modulus like parameter, MPa
 end
+
+time_steps = 25
+step_size = 1.0/time_steps
+
+tissueDensity = 1.0e-9 #tonne/mm^3
+gravityConstant = 9.81*1e3 #mm/s^2
+gravityVector = Vec{3,Float64}(0.0,0.0,gravityConstant)
 
 # -------------------------
 F1, V1, C1, C_skin = breast_surface(n,r,r1,r2,w,h,sy,gravityShiftPercentage)
 pointSpacing = mean(edgelengths(F1,V1))
 
-breastVolume = surfacevolume(F1,V1)
-tissueMass = tissueDensity * breastVolume
-bodyForceMagnitude = tissueMass * gravityConstant
-bodyForceVector = Vec{3,Float64}(0.0,0.0,bodyForceMagnitude)
+# breastVolume = surfacevolume(F1,V1)
+# tissueMass = tissueDensity * breastVolume
+# bodyForceMagnitude = tissueMass * gravityConstant
+# bodyForceVector = Vec{3,Float64}(0.0,0.0,bodyForceMagnitude)
 
 # Meshing with tetgen
 v_region = mean(V1)
@@ -50,33 +60,61 @@ vol1 = 20.0*pointSpacing^3 / (6.0*sqrt(2.0)) # volume of theoretical perfect tet
 stringOpt = "paAqY"
 E,V,CE,Fb,Cb = tetgenmesh(F1,V1; facetmarkerlist=C1, V_regions=[v_region],region_vol=vol1, stringOpt)
 
-# Creat compression plates
-zLevelPlate = 35.0
-xLevelPlate = 10.0
-width_plate = 1.25*r
-height_plate = 20.0
-depth_plate = 1.25*(2.0*r)
-rFillet = 5.0 
-pointSpacingPlate = pointSpacing/2.0
-contactOffset = pointSpacing/10.0
-zMinBreast = minimum([v[3] for v in V1])
-V_p=Point{3,Float64}[[xLevelPlate,0.0,zLevelPlate+height_plate],[xLevelPlate,0.0,zLevelPlate],[xLevelPlate+ width_plate,0.0,zLevelPlate],[xLevelPlate+ width_plate,0.0,zLevelPlate+height_plate]]
-V_pc = filletcurve(V_p; rMax=rFillet,  constrain_method = :max, n=100, close_loop = false, eps_level = 1e-6)
-V_pc = evenly_space(V_pc, pointSpacingPlate; close_loop = false, spline_order = 4)
-
-n_extrude_direction = Vec{3, Float64}(0.0,1.0,0.0) # Extrusion direction
-F2,V2 = extrudecurve(V_pc; extent=depth_plate, direction=:both, n=n_extrude_direction, close_loop=false,face_type=:quad)
-invert_faces!(F2)
-
-F3 = deepcopy(F2)
-V3 = deepcopy(V2)
-V3_x = [v[1] for v in V3]
-V3 .-= Point3{Float64}(xLevelPlate,0.0,zLevelPlate)
-Q = RotXYZ(0.0,π,0.0)
-V3 = [Point{3, Float64}(Q*v) for v ∈ V3] 
-V3 .+= Point3{Float64}(xLevelPlate+width_plate,0.0,zMinBreast-contactOffset)
-
 indices_chest_nodes = unique(reduce(vcat,Fb[Cb .== 2]))
+
+#######
+# Visualization
+
+F = element2faces(E) # Triangular faces
+CE_F = repeat(CE,inner=4)
+
+Fs,Vs = separate_vertices(F,V)
+CE_Vs = simplex2vertexdata(Fs,CE_F)
+
+Fbs,Vbs = separate_vertices(Fb,V)
+Cbs = simplex2vertexdata(Fbs,Cb)
+
+fig = Figure(size=(1200,1200))
+ax1 = Axis3(fig[1, 1], aspect = :data, xlabel = "X", ylabel = "Y", zlabel = "Z", title = "face_type=:tri, n=0")
+hp2 = poly!(ax1,GeometryBasics.Mesh(Vbs,Fbs), strokewidth=strokewidth, color=Cbs, strokecolor=:black, shading = FastShading, transparency=false, colormap=cmap, depth_shift=Float32(0.0), stroke_depth_shift=depth_shift)
+Colorbar(fig[1, 2], hp2)
+
+ax2 = Axis3(fig[1, 3], aspect = :data, xlabel = "X", ylabel = "Y", zlabel = "Z", title = "Cut mesh")
+hp2 = poly!(ax2,GeometryBasics.Mesh(Vs,Fs), color=CE_Vs, shading = FastShading, transparency=false, strokecolor=:black, strokewidth=strokewidth, overdraw=false, colorrange = (1,2), colormap=cmap, depth_shift=Float32(0.0), stroke_depth_shift=depth_shift)
+
+# normalplot(ax2,F2,V2)
+hp8 = scatter!(ax2, V[indices_chest_nodes],markersize=10,color=:black)
+
+VE  = simplexcenter(E,V)
+ZE = [v[3] for v in VE]
+Z = [v[3] for v in V]
+zMax = maximum(Z)
+zMin = minimum(Z)
+numSlicerSteps = 3*ceil(Int,(zMax-zMin)/mean(edgelengths(F,V)))
+
+stepRange = range(zMin,zMax,numSlicerSteps)
+hSlider = Slider(fig[2, 3], range = stepRange, startvalue = mean(stepRange),linewidth=30)
+
+on(hSlider.value) do z 
+    B = ZE .<= z
+    indShow = findall(B)
+    if isempty(indShow)
+        hp2.visible=false        
+    else        
+        hp2.visible=true
+        Fs = element2faces(E[indShow])
+        Cs = repeat(CE[indShow],inner=4)        
+        indB = boundaryfaceindices(Fs)        
+        Fs = Fs[indB]
+        Cs = Cs[indB]
+        Fs,Vs = separate_vertices(Fs,V)
+        CE_Vs = simplex2vertexdata(Fs,Cs)        
+        hp2[1] = GeometryBasics.Mesh(Vs,Fs)
+        hp2.color = CE_Vs
+    end
+end
+
+screen = display(GLMakie.Screen(), fig)
 
 # --------------------------------------------------------------------------------
 # FEBIO 
@@ -105,8 +143,8 @@ aen(febio_spec_node,"Module"; type = "solid") # Define Module node: <Module type
 
 control_node = aen(febio_spec_node,"Control") # Define Control node: <Control>
     aen(control_node,"analysis","STATIC")               
-    aen(control_node,"time_steps",10)
-    aen(control_node,"step_size",0.1)
+    aen(control_node,"time_steps",time_steps)
+    aen(control_node,"step_size",step_size)
     aen(control_node,"plot_zero_state",1)
     aen(control_node,"plot_range",@sprintf("%.2f, %.2f",0,-1))
     aen(control_node,"plot_level","PLOT_MAJOR_ITRS")
@@ -117,8 +155,8 @@ control_node = aen(febio_spec_node,"Control") # Define Control node: <Control>
 time_stepper_node = aen(control_node,"time_stepper"; type = "default")
     aen(time_stepper_node,"max_retries",5)
     aen(time_stepper_node,"opt_iter",10)
-    aen(time_stepper_node,"dtmin",1e-3)
-    aen(time_stepper_node,"dtmax",0.1)
+    aen(time_stepper_node,"dtmin",step_size/100)
+    aen(time_stepper_node,"dtmax",step_size)
     aen(time_stepper_node,"aggressiveness",0)
     aen(time_stepper_node,"cutback",5e-1)
     aen(time_stepper_node,"dtforce",0)
@@ -169,12 +207,14 @@ material_node = aen(Material_node,"material"; id = 1, name="Material1", type=mat
 if material_type == "neo-Hookean"
     aen(material_node,"E",E_youngs)
     aen(material_node,"v",ν)
+    aen(material_node,"density",tissueDensity)    
 elseif material_type == "Ogden unconstrained"
     aen(material_node,"c1",c1)
     aen(material_node,"m1",m1)
     aen(material_node,"c2",c1)
     aen(material_node,"m2",-m1)
     aen(material_node,"cp",k)
+    aen(material_node,"density",tissueDensity)
 end
     
 
@@ -205,21 +245,29 @@ Boundary_node = aen(febio_spec_node, "Boundary")
         aen(bc_node,"y_dof",1)
         aen(bc_node,"z_dof",1)
 
+# Loads_node = aen(febio_spec_node,"Loads")
+#         body_load_node = aen(Loads_node,"body_load"; type = "const")
+#             aen(body_load_node,"x", bodyForceVector[1]; lc = "1")
+#             aen(body_load_node,"y", bodyForceVector[2]; lc = "1")
+#             aen(body_load_node,"z", bodyForceVector[3]; lc = "1")
+
 Loads_node = aen(febio_spec_node,"Loads")
-    body_load_node = aen(Loads_node,"body_load"; type = "const")
-        aen(body_load_node,"x",bodyForceVector[1]; lc = "1")
-        aen(body_load_node,"y",bodyForceVector[2]; lc = "1")
-        aen(body_load_node,"z",bodyForceVector[3]; lc = "1")
-    
-    LoadData_node = aen(febio_spec_node,"LoadData")
+    body_load_node = aen(Loads_node,"body_load"; type = "moving frame")
+        aen(body_load_node,"wx", 0.0; lc = "1")
+        aen(body_load_node,"wy", 0.0; lc = "1")
+        aen(body_load_node,"wz", 0.0; lc = "1")
+        aen(body_load_node,"ax", gravityVector[1]; lc = "1")
+        aen(body_load_node,"ay", gravityVector[2]; lc = "1")
+        aen(body_load_node,"az", gravityVector[3]; lc = "1")
+
+LoadData_node = aen(febio_spec_node,"LoadData")
 
     load_controller_node = aen(LoadData_node,"load_controller"; id=1, name="LC_1", type="loadcurve")
-        aen(load_controller_node,"interpolate","LINEAR")
-        
-    points_node = aen(load_controller_node,"points")
-        aen(points_node,"pt",@sprintf("%.2f, %.2f",0,0))
-        aen(points_node,"pt",@sprintf("%.2f, %.2f",1,1))
-    
+        aen(load_controller_node,"interpolate","LINEAR")        
+        points_node = aen(load_controller_node,"points")
+            aen(points_node,"pt",@sprintf("%.2f, %.2f",0.0,0.0))
+            aen(points_node,"pt",@sprintf("%.2f, %.2f",1.0,1.0))
+
     Output_node = aen(febio_spec_node,"Output")
     
     plotfile_node = aen(Output_node,"plotfile"; type="febio")
@@ -261,9 +309,6 @@ end
 #######
 # Visualization
 
-strokewidth = 0.5
-cmap = Makie.Categorical(:Spectral) 
-depth_shift =Float32(-0.001)
 F = element2faces(E) # Triangular faces
 CE_F = repeat(CE,inner=4)
 
@@ -273,75 +318,25 @@ CE_Vs = simplex2vertexdata(Fs,CE_F)
 Fbs,Vbs = separate_vertices(Fb,V)
 Cbs = simplex2vertexdata(Fbs,Cb)
 
-fig = Figure(size=(1200,1200))
-ax1 = Axis3(fig[1, 1], aspect = :data, xlabel = "X", ylabel = "Y", zlabel = "Z", title = "face_type=:tri, n=0")
-hp2 = poly!(ax1,GeometryBasics.Mesh(Vbs,Fbs), strokewidth=strokewidth, color=Cbs, strokecolor=:black, shading = FastShading, transparency=false, colormap=cmap, depth_shift=Float32(0.0), stroke_depth_shift=depth_shift)
-# hp4 = scatter!(ax1, V1[indVertices_C1_1],markersize=25,color=:red)
-Colorbar(fig[1, 2], hp2)
-
-ax2 = Axis3(fig[1, 3], aspect = :data, xlabel = "X", ylabel = "Y", zlabel = "Z", title = "Cut mesh")
-hp2 = poly!(ax2,GeometryBasics.Mesh(Vs,Fs), color=CE_Vs, shading = FastShading, transparency=false, strokecolor=:black, strokewidth=strokewidth, overdraw=false, colorrange = (1,2), colormap=cmap, depth_shift=Float32(0.0), stroke_depth_shift=depth_shift)
-hp3 = scatter!(ax2, V_p,markersize=15,color=:red)
-hp4 = scatter!(ax2, V_pc,markersize=10,color=:black)
-hp5 = lines!(ax2, V_pc,linewidth=2,color=:black)
-# normalplot(ax2,F2,V2)
-hp8 = scatter!(ax2, V[indices_chest_nodes],markersize=10,color=:black)
-
-VE  = simplexcenter(E,V)
-ZE = [v[3] for v in VE]
-Z = [v[3] for v in V]
-zMax = maximum(Z)
-zMin = minimum(Z)
-numSlicerSteps = 3*ceil(Int,(zMax-zMin)/mean(edgelengths(F,V)))
-
-stepRange = range(zMin,zMax,numSlicerSteps)
-hSlider = Slider(fig[2, 3], range = stepRange, startvalue = mean(stepRange),linewidth=30)
-
-on(hSlider.value) do z 
-
-    B = ZE .<= z
-    indShow = findall(B)
-    if isempty(indShow)
-        hp2.visible=false        
-    else        
-        hp2.visible=true
-        Fs = element2faces(E[indShow])
-        Cs = repeat(CE[indShow],inner=4)        
-        indB = boundaryfaceindices(Fs)        
-        Fs = Fs[indB]
-        Cs = Cs[indB]
-        Fs,Vs = separate_vertices(Fs,V)
-        CE_Vs = simplex2vertexdata(Fs,Cs)        
-        hp2[1] = GeometryBasics.Mesh(Vs,Fs)
-        hp2.color = CE_Vs
-    end
-
-end
-
-hSlider = Slider(fig[2,4], range = incRange, startvalue = numInc-1,linewidth=30)
-
-nodalColor = lift(hSlider.value) do stepIndex
-    norm.(DD_disp[stepIndex].data)
-end
-
-M = lift(hSlider.value) do stepIndex    
-    return GeometryBasics.Mesh(V.+DD_disp[stepIndex].data,Fb)
-end
-
-titleString = lift(hSlider.value) do stepIndex
-  "Step: "*string(stepIndex)
-end
-
-ax3=Axis3(fig[1,4], aspect = :data, xlabel = "X", ylabel = "Y", zlabel = "Z", title = titleString)
-
 min_p = minp([minp(V) for V in VT])
 max_p = maxp([maxp(V) for V in VT])
 
-limits!(ax3, (min_p[1],max_p[1]), 
+limits!(ax1, (min_p[1],max_p[1]), 
             (min_p[2],max_p[2]), 
             (min_p[3],max_p[3]))
 
-hp=poly!(ax3,M, strokewidth=strokewidth,color=nodalColor, transparency=false, shading = FastShading, colormap = Reverse(:Spectral), depth_shift=Float32(0.0), stroke_depth_shift=depth_shift)#,colorrange=(0,sqrt(sum(displacement_prescribed.^2))))
-Colorbar(fig[1,5],hp.plots[1],label = "Displacement magnitude [mm]") 
+fig = Figure(size=(1200,1200))
+ax1 = AxisGeom(fig[1, 1], title = "face_type=:tri, n=0")
+hp = meshplot!(ax1, Fb, V.+DD_disp[numInc-1].data, strokewidth=strokewidth, color=nodalColor, colormap = Reverse(:Spectral))
 
-fig
+Colorbar(fig[1,2], hp,label = "Displacement magnitude [mm]") 
+
+hSlider = Slider(fig[2,:], range = incRange, startvalue = numInc-1,linewidth=30)
+
+on(hSlider.value) do stepIndex 
+    hp[1] = GeometryBasics.Mesh(V.+DD_disp[stepIndex].data, Fb)
+    hp.color = norm.(DD_disp[stepIndex].data)
+    ax1.title = "Step: "*string(stepIndex)
+end
+
+screen = display(GLMakie.Screen(), fig)
