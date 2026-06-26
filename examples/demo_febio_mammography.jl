@@ -63,7 +63,7 @@ indices_chest_nodes = unique(reduce(vcat,Fb[Cb .== 2]))
 Fb_contact = Fb[Cb.==1]
 
 compressionAngle = 0.0 * (pi/180)
-plateDisplacement_XYZ = Point{3,Float64}(0.0,0.0,25.0)
+plateDisplacement_XYZ = Point{3,Float64}(0.0,0.0, r/2.0)
 Q_compression = RotXYZ(compressionAngle,0.0,0.0)
 V2 = [Q_compression*v for v in V2]
 V3 = [Q_compression*v for v in V3]
@@ -77,7 +77,7 @@ append!(V,V3) # Add nodes
 
 # Contact parameters
 contactPenalty = 100.0;
-laugon = 0;
+laugon = 1;
 minaug = 1;
 maxaug = 10;
 fric_coeff = 0.1;
@@ -87,7 +87,7 @@ fric_coeff = 0.1;
 numTimeSteps=20 # Number of time steps desired
 max_refs=50 # Max reforms
 max_ups=0 # Set to zero to use full-Newton iterations
-opt_iter=15 # Optimum number of iterations
+opt_iter=20 # Optimum number of iterations
 max_retries=5 # Maximum number of retires
 dtmin=(1.0/numTimeSteps)/100.0 # Minimum time step size
 dtmax=1.0/numTimeSteps  # Maximum time step size
