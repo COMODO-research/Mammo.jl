@@ -75,12 +75,12 @@ Fbs,Vbs = separate_vertices(Fb,V)
 Cbs = simplex2vertexdata(Fbs,Cb)
 
 fig = Figure(size=(1200,1200))
-ax1 = Axis3(fig[1, 1], aspect = :data, xlabel = "X", ylabel = "Y", zlabel = "Z", title = "face_type=:tri, n=0")
-hp2 = poly!(ax1,GeometryBasics.Mesh(Vbs,Fbs), strokewidth=strokewidth, color=Cbs, strokecolor=:black, shading = FastShading, transparency=false, colormap=cmap, depth_shift=Float32(0.0), stroke_depth_shift=depth_shift)
+ax1 = AxisGeom(fig[1, 1], title = "face_type=:tri, n=0")
+hp2 = meshplot!(ax1, Fbs, Vbs, strokewidth=strokewidth, color=Cbs, strokecolor=:black, colormap=cmap)
 Colorbar(fig[1, 2], hp2)
 
-ax2 = Axis3(fig[1, 3], aspect = :data, xlabel = "X", ylabel = "Y", zlabel = "Z", title = "Cut mesh")
-hp2 = poly!(ax2,GeometryBasics.Mesh(Vs,Fs), color=CE_Vs, shading = FastShading, transparency=false, strokecolor=:black, strokewidth=strokewidth, overdraw=false, colorrange = (1,2), colormap=cmap, depth_shift=Float32(0.0), stroke_depth_shift=depth_shift)
+ax2 = AxisGeom(fig[1, 3], zlabel = "Z", title = "Cut mesh")
+hp2 = meshplot!(ax2, Fs, Vs, color=CE_Vs, strokecolor=:black, strokewidth=strokewidth, colorrange = (1,2), colormap=cmap)
 
 # normalplot(ax2,F2,V2)
 hp8 = scatter!(ax2, V[indices_chest_nodes],markersize=10,color=:black)
@@ -203,7 +203,7 @@ Constants_node = aen(Globals_node,"Constants")
 
 Material_node = aen(febio_spec_node,"Material")
 
-material_node = aen(Material_node,"material"; id = 1, name="Material1", type=material_type)
+material_node = aen(Material_node,"material"; id = "1", name="Material1", type=material_type)
 if material_type == "neo-Hookean"
     aen(material_node,"E",E_youngs)
     aen(material_node,"v",ν)
@@ -222,13 +222,13 @@ Mesh_node = aen(febio_spec_node,"Mesh")
 
     Nodes_node = aen(Mesh_node,"Nodes"; name="nodeSet_all")
     for (i,v) in enumerate(V)        
-        aen(Nodes_node,"node", join([@sprintf("%.16e",x) for x ∈ v],','); id = i)     
+        aen(Nodes_node,"node", join([@sprintf("%.16e",x) for x ∈ v],','); id = @sprintf("%i", i))     
     end
     
     # Elements
     Elements_node_1 = aen(Mesh_node,"Elements"; name="Part1", type="tet4")
     for (i,e) in enumerate(E)        
-        aen(Elements_node_1,"elem", join([@sprintf("%i", j) for j ∈ e],','); id = i)     
+        aen(Elements_node_1,"elem", join([@sprintf("%i", j) for j ∈ e],','); id = @sprintf("%i", i))     
     end
     
     MeshDomains_node = aen(febio_spec_node, "MeshDomains")
@@ -262,7 +262,7 @@ Loads_node = aen(febio_spec_node,"Loads")
 
 LoadData_node = aen(febio_spec_node,"LoadData")
 
-    load_controller_node = aen(LoadData_node,"load_controller"; id=1, name="LC_1", type="loadcurve")
+    load_controller_node = aen(LoadData_node,"load_controller"; id="1", name="LC_1", type="loadcurve")
         aen(load_controller_node,"interpolate","LINEAR")        
         points_node = aen(load_controller_node,"points")
             aen(points_node,"pt",@sprintf("%.2f, %.2f",0.0,0.0))
@@ -306,8 +306,7 @@ VT = Vector{Vector{Point{3,Float64}}}()
     push!(VT,V .+ [Point{3,Float64}(v) for v in DD_disp[i].data])
 end
 
-#######
-# Visualization
+## Visualization
 
 F = element2faces(E) # Triangular faces
 CE_F = repeat(CE,inner=4)
@@ -325,6 +324,7 @@ limits!(ax1, (min_p[1],max_p[1]),
             (min_p[2],max_p[2]), 
             (min_p[3],max_p[3]))
 
+nodalColor = norm.(DD_disp[numInc-1].data)
 fig = Figure(size=(1200,1200))
 ax1 = AxisGeom(fig[1, 1], title = "face_type=:tri, n=0")
 hp = meshplot!(ax1, Fb, V.+DD_disp[numInc-1].data, strokewidth=strokewidth, color=nodalColor, colormap = Reverse(:Spectral))

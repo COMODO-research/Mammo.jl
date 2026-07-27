@@ -198,7 +198,7 @@ Constants_node = aen(Globals_node,"Constants")
 
 Material_node = aen(febio_spec_node,"Material")
 
-material_node = aen(Material_node,"material"; id = 1, name="Material1", type=material_type)
+material_node = aen(Material_node,"material"; id = "1", name="Material1", type=material_type)
 if material_type == "neo-Hookean"
     aen(material_node,"E",E_youngs)
     aen(material_node,"v",ν)
@@ -216,11 +216,11 @@ elseif material_type == "Ogden"
     aen(material_node,"k",k)
 end
     
-material_node = aen(Material_node,"material"; id = 2, name="Material2", type="rigid body")
+material_node = aen(Material_node,"material"; id = "2", name="Material2", type="rigid body")
     aen(material_node,"density",1.0)
     aen(material_node,"center_of_mass",join([@sprintf("%.16e",x) for x ∈ mean(V2)],','))
 
-material_node = aen(Material_node,"material"; id = 3, name="Material3", type="rigid body")
+material_node = aen(Material_node,"material"; id = "3", name="Material3", type="rigid body")
     aen(material_node,"density",1.0)
     aen(material_node,"center_of_mass",join([@sprintf("%.16e",x) for x ∈ mean(V3)],','))
 
@@ -228,23 +228,23 @@ Mesh_node = aen(febio_spec_node,"Mesh")
 
     Nodes_node = aen(Mesh_node,"Nodes"; name="nodeSet_all")
     for (i,v) in enumerate(V)        
-        aen(Nodes_node,"node", join([@sprintf("%.16e",x) for x ∈ v],','); id = i)     
+        aen(Nodes_node,"node", join([@sprintf("%.16e",x) for x ∈ v],','); id = @sprintf("%i", i))     
     end
     
     # Elements
     Elements_node_1 = aen(Mesh_node,"Elements"; name="Part1", type="tet4")
     for (i,e) in enumerate(E)        
-        aen(Elements_node_1,"elem",join([@sprintf("%i",j) for j in e], ','); id = i)
+        aen(Elements_node_1,"elem",join([@sprintf("%i",j) for j in e], ','); id = @sprintf("%i", i))
     end
     
     Elements_node_2 = aen(Mesh_node,"Elements"; name="Part2", type="quad4")
     for (i,e) in enumerate(F2)        
-        aen(Elements_node_2,"elem",join([@sprintf("%i",j) for j in e], ','); id = i+length(E))
+        aen(Elements_node_2,"elem",join([@sprintf("%i",j) for j in e], ','); id = @sprintf("%i", i+length(E)))
     end
 
     Elements_node_3 = aen(Mesh_node,"Elements"; name="Part3", type="quad4")
     for (i,e) in enumerate(F3)        
-        aen(Elements_node_3,"elem",join(map(string, e), ','); id = i)
+        aen(Elements_node_3,"elem",join(map(string, e), ','); id = @sprintf("%i", i))
     end
 
     # Node sets
@@ -254,19 +254,19 @@ Mesh_node = aen(febio_spec_node,"Mesh")
     surfaceName1 = "Skin"
     Surface_node = aen(Mesh_node,"Surface"; name=surfaceName1)
     for (i,e) in enumerate(Fb_contact)        
-        aen(Surface_node,"tri3",join([@sprintf("%i",j) for j in e], ','); id = i)
+        aen(Surface_node,"tri3",join([@sprintf("%i",j) for j in e], ','); id = @sprintf("%i", i))
     end
 
     surfaceName2 = "Plate1"
     Surface_node = aen(Mesh_node,"Surface"; name=surfaceName2)
     for (i,e) in enumerate(F2)        
-        aen(Surface_node,"quad4",join([@sprintf("%i",j) for j in e], ','); id = i)
+        aen(Surface_node,"quad4",join([@sprintf("%i",j) for j in e], ','); id = @sprintf("%i", i))
     end
 
     surfaceName3 = "Plate2"
     Surface_node = aen(Mesh_node,"Surface"; name=surfaceName3)
     for (i,e) in enumerate(F3)        
-        aen(Surface_node,"quad4",join([@sprintf("%i",j) for j in e], ','); id = i)
+        aen(Surface_node,"quad4",join([@sprintf("%i",j) for j in e], ','); id = @sprintf("%i", i))
     end
 
     surfacePairName1 = "Skin_plate1"
@@ -453,7 +453,6 @@ stepRange = range(zMin,zMax,numSlicerSteps)
 hSlider = Slider(fig[2, 1], range = stepRange, startvalue = mean(stepRange),linewidth=30)
 
 on(hSlider.value) do z 
-
     B = ZE .<= z
     indShow = findall(B)
     if isempty(indShow)
@@ -471,7 +470,6 @@ on(hSlider.value) do z
         hp2[1] = GeometryBasics.Mesh(Vs,Fs)
         # hp2.color = CE_Vs
     end
-
 end
 # hSlider.selected_index[]+=1
 slidercontrol(hSlider,ax1)
