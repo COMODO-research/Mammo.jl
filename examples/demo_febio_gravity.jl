@@ -37,7 +37,7 @@ elseif material_type == "Ogden unconstrained"
     k = bulkModulusFactor*c1 # Bulk-modulus like parameter, MPa
 end
 
-time_steps = 25
+time_steps = 5
 step_size = 1.0/time_steps
 
 tissueDensity = 1.0e-9 #tonne/mm^3
