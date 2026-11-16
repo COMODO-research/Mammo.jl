@@ -15,8 +15,6 @@ strokewidth = 0.5
 cmap = Makie.Categorical(:Spectral) 
 
 
-# Example geometry for a sphere that is cut so some edges are boundary edges
-n = 3 # Number of refinement steps of the geodesic sphere
 r = 40.0 # hemisphere radius
 r1 = r/2.5
 r2 = r/7.0
@@ -25,12 +23,27 @@ h = r2/1.5
 sy = 1.0 # y-direction squeeze
 gravityShiftPercentage = 0.5; #Percentage shift due to gravity
 
-material_type = "Ogden unconstrained" #"neo-Hookean"
+element_type = Hex20{Int} # Options: Tet4{Int}, Tet10{Int}, Hex8{Int}, Hex20{Int}
 
+# Parameters that depend on element type choice
+if in(element_type, (Tet4{Int}, Tet10{Int}))
+    n = 3 # Number of refinement steps of the geodesic sphere
+    volfactor = 4.0 # Interior elements are allowed to be this many times larger in volume than at boundary
+elseif in(element_type, (Hex8{Int}, Hex20{Int}))
+    pointSpacing = 4.0 # For Hex meshes: Nodal point spacing 
+end
+
+# Material parameters 
+material_type = "Ogden" #"neo-Hookean"
 if material_type == "neo-Hookean"
     E_youngs = 2e-3 # MPa
     ν = 0.49
 elseif material_type == "Ogden unconstrained"
+    bulkModulusFactor = 100.0
+    c1 = 2e-3/3.0 # Shear modulus like parameter, MPa
+    m1 = 2 # Set non-linearity
+    k = bulkModulusFactor*c1 # Bulk-modulus like parameter, MPa
+elseif material_type == "Ogden"
     bulkModulusFactor = 100.0
     c1 = 2e-3/3.0 # Shear modulus like parameter, MPa
     m1 = 2 # Set non-linearity
@@ -44,30 +57,45 @@ tissueDensity = 1.0e-9 #tonne/mm^3
 gravityConstant = 9.81*1e3 #mm/s^2
 gravityVector = Vec{3,Float64}(0.0,0.0,gravityConstant)
 
-# -------------------------
-F1, V1, C1, C_skin = breast_surface(n,r,r1,r2,w,h,sy,gravityShiftPercentage)
-pointSpacing = mean(edgelengths(F1,V1))
+## Tetrahedral mesh of a breast
 
-# breastVolume = surfacevolume(F1,V1)
+if in(element_type, (Tet4{Int}, Tet10{Int}))
+    E, V, Fb, Cb = tet_breast(n,r,r1,r2,w,h,sy,gravityShiftPercentage,volFactor; element_type=element_type, stringOpt = "paAqY")
+elseif in(element_type, (Hex8{Int}, Hex20{Int}))
+    E, V, Fb, Cb = hex_breast(r, r1, r2, w, h, sy, gravityShiftPercentage, pointSpacing; element_type=element_type)         
+end
+CE = fill(1, length(E))
+F = element2faces(E) # Triangular faces
+
+if element_type ==  Tet4{Int}
+    element_type_febio = "tet4"
+    element_type_febio_surface = "tri3"
+    numFacesPerElement = 4    
+elseif element_type ==  Tet10{Int}    
+    element_type_febio = "tet10"
+    element_type_febio_surface = "tri6"
+    numFacesPerElement = 4
+elseif element_type == Hex8{Int}
+    element_type_febio = "hex8"
+    element_type_febio_surface = "quad4"
+    numFacesPerElement = 6
+elseif element_type == Hex20{Int}  
+    element_type_febio = "hex20"
+    element_type_febio_surface = "quad8"
+    numFacesPerElement = 6
+end
+
+CE_F = repeat(CE, inner=numFacesPerElement)
+
+indices_chest_nodes = unique(reduce(vcat,Fb[Cb .== 2]))
+
+# breastVolume = surfacevolume(Fb,V)
 # tissueMass = tissueDensity * breastVolume
 # bodyForceMagnitude = tissueMass * gravityConstant
 # bodyForceVector = Vec{3,Float64}(0.0,0.0,bodyForceMagnitude)
 
-# Meshing with tetgen
-v_region = mean(V1)
-vol1 = 20.0*pointSpacing^3 / (6.0*sqrt(2.0)) # volume of theoretical perfect tetrahedron
-
-stringOpt = "paAqY"
-E,V,CE,Fb,Cb = tetgenmesh(F1,V1; facetmarkerlist=C1, V_regions=[v_region],region_vol=vol1, stringOpt)
-
-indices_chest_nodes = unique(reduce(vcat,Fb[Cb .== 2]))
-
 #######
 # Visualization
-
-F = element2faces(E) # Triangular faces
-CE_F = repeat(CE,inner=4)
-
 Fs,Vs = separate_vertices(F,V)
 CE_Vs = simplex2vertexdata(Fs,CE_F)
 
@@ -103,7 +131,7 @@ on(hSlider.value) do z
     else        
         hp2.visible=true
         Fs = element2faces(E[indShow])
-        Cs = repeat(CE[indShow],inner=4)        
+        Cs = repeat(CE[indShow], inner=numFacesPerElement)        
         indB = boundaryfaceindices(Fs)        
         Fs = Fs[indB]
         Cs = Cs[indB]
@@ -215,6 +243,13 @@ elseif material_type == "Ogden unconstrained"
     aen(material_node,"m2",-m1)
     aen(material_node,"cp",k)
     aen(material_node,"density",tissueDensity)
+elseif material_type == "Ogden"
+    aen(material_node,"c1",c1)
+    aen(material_node,"m1",m1)
+    aen(material_node,"c2",c1)
+    aen(material_node,"m2",-m1)
+    aen(material_node,"k",k)
+    aen(material_node,"density",tissueDensity)
 end
     
 
@@ -226,7 +261,7 @@ Mesh_node = aen(febio_spec_node,"Mesh")
     end
     
     # Elements
-    Elements_node_1 = aen(Mesh_node,"Elements"; name="Part1", type="tet4")
+    Elements_node_1 = aen(Mesh_node,"Elements"; name="Part1", type=element_type_febio)
     for (i,e) in enumerate(E)        
         aen(Elements_node_1,"elem", join([@sprintf("%i", j) for j ∈ e],','); id = @sprintf("%i", i))     
     end
@@ -291,52 +326,50 @@ XML.write(filename_FEB, doc)
 
 #######
 # Run FEBio
-run_febio(filename_FEB,FEBIO_EXEC)
+run_flag = run_febio(filename_FEB, filename_log; febio_path="febio4", run_mode=:external, max_wait_time=60.0, quiet=false)   
 
-#######
-# Import results
-DD_disp = read_logfile(joinpath(saveDir,filename_disp))
-DD_stress = read_logfile(joinpath(saveDir,filename_stress))
-numInc = length(DD_disp)
-incRange = 0:1:numInc-1
+##
+if run_flag == :normal
+    # Import results
+    DD_disp = read_logfile(joinpath(saveDir,filename_disp))
+    DD_stress = read_logfile(joinpath(saveDir,filename_stress))
+    numInc = length(DD_disp)
+    incRange = 0:1:numInc-1
 
-# Create time varying coordinate vector
-VT = Vector{Vector{Point{3,Float64}}}()
-@inbounds for i in 0:1:numInc-1
-    push!(VT,V .+ [Point{3,Float64}(v) for v in DD_disp[i].data])
+    # Create time varying coordinate vector
+    VT = Vector{Vector{Point{3,Float64}}}()
+    @inbounds for i in 0:1:numInc-1
+        push!(VT,V .+ [Point{3,Float64}(v) for v in DD_disp[i].data])
+    end
+
+    ## Visualization
+    Fs,Vs = separate_vertices(F,V)
+    CE_Vs = simplex2vertexdata(Fs,CE_F)
+
+    Fbs,Vbs = separate_vertices(Fb,V)
+    Cbs = simplex2vertexdata(Fbs,Cb)
+
+    min_p = minp([minp(V) for V in VT])
+    max_p = maxp([maxp(V) for V in VT])
+
+    limits!(ax1, (min_p[1],max_p[1]), 
+                (min_p[2],max_p[2]), 
+                (min_p[3],max_p[3]))
+
+    nodalColor = norm.(DD_disp[numInc-1].data)
+    fig = Figure(size=(1200,1200))
+    ax1 = AxisGeom(fig[1, 1], title = "Deformed model")
+    hp = meshplot!(ax1, Fb, V.+DD_disp[numInc-1].data, strokewidth=strokewidth, color=nodalColor, colormap = Reverse(:Spectral))
+
+    Colorbar(fig[1,2], hp,label = "Displacement magnitude [mm]") 
+
+    hSlider = Slider(fig[2,:], range = incRange, startvalue = numInc-1,linewidth=30)
+
+    on(hSlider.value) do stepIndex 
+        hp[1] = GeometryBasics.Mesh(V.+DD_disp[stepIndex].data, Fb)
+        hp.color = norm.(DD_disp[stepIndex].data)
+        ax1.title = "Step: "*string(stepIndex)
+    end
+
+    screen = display(GLMakie.Screen(), fig)
 end
-
-## Visualization
-
-F = element2faces(E) # Triangular faces
-CE_F = repeat(CE,inner=4)
-
-Fs,Vs = separate_vertices(F,V)
-CE_Vs = simplex2vertexdata(Fs,CE_F)
-
-Fbs,Vbs = separate_vertices(Fb,V)
-Cbs = simplex2vertexdata(Fbs,Cb)
-
-min_p = minp([minp(V) for V in VT])
-max_p = maxp([maxp(V) for V in VT])
-
-limits!(ax1, (min_p[1],max_p[1]), 
-            (min_p[2],max_p[2]), 
-            (min_p[3],max_p[3]))
-
-nodalColor = norm.(DD_disp[numInc-1].data)
-fig = Figure(size=(1200,1200))
-ax1 = AxisGeom(fig[1, 1], title = "face_type=:tri, n=0")
-hp = meshplot!(ax1, Fb, V.+DD_disp[numInc-1].data, strokewidth=strokewidth, color=nodalColor, colormap = Reverse(:Spectral))
-
-Colorbar(fig[1,2], hp,label = "Displacement magnitude [mm]") 
-
-hSlider = Slider(fig[2,:], range = incRange, startvalue = numInc-1,linewidth=30)
-
-on(hSlider.value) do stepIndex 
-    hp[1] = GeometryBasics.Mesh(V.+DD_disp[stepIndex].data, Fb)
-    hp.color = norm.(DD_disp[stepIndex].data)
-    ax1.title = "Step: "*string(stepIndex)
-end
-
-screen = display(GLMakie.Screen(), fig)

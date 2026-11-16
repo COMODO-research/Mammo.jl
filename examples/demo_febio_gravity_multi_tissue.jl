@@ -14,8 +14,6 @@ GLMakie.closeall()
 strokewidth = 0.5
 cmap = Makie.Categorical(:Spectral) 
 
-
-# Example geometry for a sphere that is cut so some edges are boundary edges
 n = 3 # Number of refinement steps of the geodesic sphere
 r = 40.0 # hemisphere radius
 r1 = r/2.5
@@ -41,7 +39,7 @@ k = bulkModulusFactor*c3 # Bulk-modulus like parameter, MPa
 time_steps = 5
 step_size = 1.0/time_steps
 
-skinThickness = 0.9 
+skinThickness = 0.9
 tissueDensity = 1.0e-9 #tonne/mm^3
 
 gravityConstant = 9.81*1e3 #mm/s^2
@@ -390,7 +388,7 @@ limits!(ax1, (min_p[1],max_p[1]),
 
 nodalColor = norm.(DD_disp[numInc-1].data)
 fig = Figure(size=(1200,1200))
-ax1 = AxisGeom(fig[1, 1], title = "face_type=:tri, n=0")
+ax1 = AxisGeom(fig[1, 1], title = "Deformed model")
 hp = meshplot!(ax1, Fb, V.+DD_disp[numInc-1].data, strokewidth=strokewidth, color=nodalColor, colormap = Reverse(:Spectral))
 
 Colorbar(fig[1,2], hp,label = "Displacement magnitude [mm]") 

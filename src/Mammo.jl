@@ -12,6 +12,6 @@ export Comodo
 export FEBio
 
 # Export functions
-export mammodir, breast_surface 
+export mammodir, breast_surface, tet_breast, hex_breast
 
 end # module Mammo

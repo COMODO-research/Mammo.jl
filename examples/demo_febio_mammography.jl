@@ -10,9 +10,13 @@ using Mammo.FEBio
 using Printf 
 using Mammo.Comodo.GLMakie.Colors
 
+# Visualization settings 
+GLMakie.closeall()
+strokewidth = 0.5
+cmap = Makie.Categorical(:Spectral) 
+
 cAlpha = RGBA(1.0, 1.0, 1.0,0.5)
 
-# Example geometry for a sphere that is cut so some edges are boundary edges
 n = 3 # Number of refinement steps of the geodesic sphere
 r = 40.0 # hemisphere radius
 r1 = r/2.5
@@ -27,7 +31,7 @@ pointSpacing = mean(edgelengths(F1,V1))
 
 # Meshing with tetgen
 v_region = mean(V1)
-vol1 = 10.0* pointSpacing^3 / (6.0*sqrt(2.0)) # volume of theoretical perfect tetrahedron
+vol1 = 2.0* pointSpacing^3 / (6.0*sqrt(2.0)) # volume of theoretical perfect tetrahedron
 
 stringOpt = "paAqY"
 E,V,CE,Fb,Cb = tetgenmesh(F1,V1; facetmarkerlist=C1, V_regions=[v_region],region_vol=vol1, stringOpt)
@@ -63,7 +67,8 @@ indices_chest_nodes = unique(reduce(vcat,Fb[Cb .== 2]))
 Fb_contact = Fb[Cb.==1]
 
 compressionAngle = 0.0 * (pi/180)
-plateDisplacement_XYZ = Point{3,Float64}(0.0,0.0, r/2.0)
+compressionLevel = 0.65
+plateDisplacement_XYZ = Point{3,Float64}(0.0,0.0, compressionLevel*r)
 Q_compression = RotXYZ(compressionAngle,0.0,0.0)
 V2 = [Q_compression*v for v in V2]
 V3 = [Q_compression*v for v in V3]
@@ -77,17 +82,16 @@ append!(V,V3) # Add nodes
 
 # Contact parameters
 contactPenalty = 100.0;
-laugon = 1;
+laugon = 0;
 minaug = 1;
 maxaug = 10;
 fric_coeff = 0.1;
 
-
 # FEA control settings
-numTimeSteps=20 # Number of time steps desired
+numTimeSteps=30 # Number of time steps desired
 max_refs=50 # Max reforms
 max_ups=0 # Set to zero to use full-Newton iterations
-opt_iter=20 # Optimum number of iterations
+opt_iter=15 # Optimum number of iterations
 max_retries=5 # Maximum number of retires
 dtmin=(1.0/numTimeSteps)/100.0 # Minimum time step size
 dtmax=1.0/numTimeSteps  # Maximum time step size
@@ -401,106 +405,106 @@ XML.write(filename_FEB, doc)
 
 #######
 # Run FEBio
-run_febio(filename_FEB,FEBIO_EXEC)
+run_flag = run_febio(filename_FEB, filename_log; febio_path="febio4", run_mode=:external, max_wait_time=30.0, quiet=false)   
 
-#######
-# Import results
-DD_disp = read_logfile(joinpath(saveDir,filename_disp))
-DD_stress = read_logfile(joinpath(saveDir,filename_stress))
-numInc = length(DD_disp)
-incRange = 0:1:numInc-1
+##
+if run_flag == :normal
+    # Import results
+    DD_disp = read_logfile(joinpath(saveDir,filename_disp))
+    DD_stress = read_logfile(joinpath(saveDir,filename_stress))
+    numInc = length(DD_disp)
+    incRange = 0:1:numInc-1
 
-# Create time varying coordinate vector
-VT = Vector{Vector{Point{3,Float64}}}()
-@inbounds for i in 0:1:numInc-1
-    push!(VT,V .+ [Point{3,Float64}(v) for v in DD_disp[i].data])
-end
-
-#######
-# --------------------------------------------------------------------------------
-# Visualization
-strokewidth = 1 
-cmap = Makie.Categorical(:Spectral) 
-
-F = element2faces(E) # Triangular faces
-CE_F = repeat(CE,inner=4)
-
-Fs,Vs = separate_vertices(F,V)
-CE_Vs = simplex2vertexdata(Fs,CE_F)
-
-Fbs,Vbs = separate_vertices(Fb,V)
-Cbs = simplex2vertexdata(Fbs,Cb)
-
-fig = Figure(size=(1200,1200))
-ax1 = AxisGeom(fig[1, 1], title = "Cut mesh")
-hp2 = meshplot!(ax1, Fs, Vs, strokecolor=:black, strokewidth=strokewidth)
-hp3 = scatter!(ax1, V_p,markersize=15,color=:red)
-hp4 = scatter!(ax1, V_pc,markersize=10,color=:black)
-hp5 = lines!(ax1, V_pc,linewidth=2,color=:black)
-hp6 = meshplot!(ax1, F2, V, strokewidth=0, color=cAlpha, transparency=true)
-hp7 = meshplot!(ax1, F3, V, strokewidth=0, color=cAlpha, transparency=true)
-# normalplot(ax2,F2,V2)
-hp8 = scatter!(ax1, V[indices_chest_nodes],markersize=10,color=:black)
-
-VE  = simplexcenter(E,V)
-ZE = [v[3] for v in VE]
-Z = [v[3] for v in V]
-zMax = maximum(Z)
-zMin = minimum(Z)
-numSlicerSteps = 3*ceil(Int,(zMax-zMin)/mean(edgelengths(F,V)))
-
-stepRange = range(zMin,zMax,numSlicerSteps)
-hSlider = Slider(fig[2, 1], range = stepRange, startvalue = mean(stepRange),linewidth=30)
-
-on(hSlider.value) do z 
-    B = ZE .<= z
-    indShow = findall(B)
-    if isempty(indShow)
-        hp2.visible=false        
-    else        
-        hp2.visible=true
-        Fs = element2faces(E[indShow])
-        Cs = repeat(CE[indShow],inner=4)
-        
-        indB = boundaryfaceindices(Fs)        
-        Fs = Fs[indB]
-        Cs = Cs[indB]
-        Fs,Vs = separate_vertices(Fs,V)
-        CE_Vs = simplex2vertexdata(Fs,Cs)        
-        hp2[1] = GeometryBasics.Mesh(Vs,Fs)
-        # hp2.color = CE_Vs
+    # Create time varying coordinate vector
+    VT = Vector{Vector{Point{3,Float64}}}()
+    @inbounds for i in 0:1:numInc-1
+        push!(VT,V .+ [Point{3,Float64}(v) for v in DD_disp[i].data])
     end
+
+    #######
+    # --------------------------------------------------------------------------------
+    # Visualization
+ 
+    F = element2faces(E) # Triangular faces
+    CE_F = repeat(CE,inner=4)
+
+    Fs,Vs = separate_vertices(F,V)
+    CE_Vs = simplex2vertexdata(Fs,CE_F)
+
+    Fbs,Vbs = separate_vertices(Fb,V)
+    Cbs = simplex2vertexdata(Fbs,Cb)
+
+    fig = Figure(size=(1200,1200))
+    ax1 = AxisGeom(fig[1, 1], title = "Cut mesh")
+    hp2 = meshplot!(ax1, Fs, Vs, strokecolor=:black, strokewidth=strokewidth)
+    hp3 = scatter!(ax1, V_p,markersize=15,color=:red)
+    hp4 = scatter!(ax1, V_pc,markersize=10,color=:black)
+    hp5 = lines!(ax1, V_pc,linewidth=2,color=:black)
+    hp6 = meshplot!(ax1, F2, V, strokewidth=0, color=cAlpha, transparency=true)
+    hp7 = meshplot!(ax1, F3, V, strokewidth=0, color=cAlpha, transparency=true)
+    # normalplot(ax2,F2,V2)
+    hp8 = scatter!(ax1, V[indices_chest_nodes],markersize=10,color=:black)
+
+    VE  = simplexcenter(E,V)
+    ZE = [v[3] for v in VE]
+    Z = [v[3] for v in V]
+    zMax = maximum(Z)
+    zMin = minimum(Z)
+    numSlicerSteps = 3*ceil(Int,(zMax-zMin)/mean(edgelengths(F,V)))
+
+    stepRange = range(zMin,zMax,numSlicerSteps)
+    hSlider = Slider(fig[2, 1], range = stepRange, startvalue = mean(stepRange),linewidth=30)
+
+    on(hSlider.value) do z 
+        B = ZE .<= z
+        indShow = findall(B)
+        if isempty(indShow)
+            hp2.visible=false        
+        else        
+            hp2.visible=true
+            Fs = element2faces(E[indShow])
+            Cs = repeat(CE[indShow],inner=4)
+            
+            indB = boundaryfaceindices(Fs)        
+            Fs = Fs[indB]
+            Cs = Cs[indB]
+            Fs,Vs = separate_vertices(Fs,V)
+            CE_Vs = simplex2vertexdata(Fs,Cs)        
+            hp2[1] = GeometryBasics.Mesh(Vs,Fs)
+            # hp2.color = CE_Vs
+        end
+    end
+    # hSlider.selected_index[]+=1
+    slidercontrol(hSlider,ax1)
+
+    ax2=AxisGeom(fig[1,2], title = "Step: 1")
+
+    min_p = minp([minp(V) for V in VT])
+    max_p = maxp([maxp(V) for V in VT])
+
+    limits!(ax2, (min_p[1],max_p[1]), 
+                (min_p[2],max_p[2]), 
+                (min_p[3],max_p[3]))
+
+    sliderInitialStep = 1
+    hp21=meshplot!(ax2, Fb, V, strokewidth=0, color=norm.(DD_disp[sliderInitialStep].data), transparency=false, colormap = Reverse(:Spectral))
+    hp22=meshplot!(ax2, F2, V, strokewidth=0, color=cAlpha, transparency=true)
+    hp23=meshplot!(ax2, F3, V, strokewidth=0, color=cAlpha, transparency=true)
+    Colorbar(fig[1,3],hp21,label = "Displacement magnitude [mm]") 
+
+    hSlider2 = Slider(fig[2,2], range = incRange, startvalue = sliderInitialStep,linewidth=30)
+
+    on(hSlider2.value) do stepIndex
+        U = DD_disp[stepIndex].data  
+        VN = V .+ U
+        hp21[1] = GeometryBasics.Mesh(VN,Fb)
+        hp21.color = norm.(U)  
+        hp22[1] = GeometryBasics.Mesh(VN,F2)
+        hp23[1] = GeometryBasics.Mesh(VN,F3)
+        ax2.title = "Step: "*string(stepIndex)
+    end
+
+    slidercontrol(hSlider,ax2)
+
+    screen = display(GLMakie.Screen(), fig)
 end
-# hSlider.selected_index[]+=1
-slidercontrol(hSlider,ax1)
-
-ax2=AxisGeom(fig[1,2], title = "Step: 1")
-
-min_p = minp([minp(V) for V in VT])
-max_p = maxp([maxp(V) for V in VT])
-
-limits!(ax2, (min_p[1],max_p[1]), 
-            (min_p[2],max_p[2]), 
-            (min_p[3],max_p[3]))
-
-sliderInitialStep = 1
-hp21=meshplot!(ax2, Fb, V, strokewidth=0, color=norm.(DD_disp[sliderInitialStep].data), transparency=false, colormap = Reverse(:Spectral))
-hp22=meshplot!(ax2, F2, V, strokewidth=0, color=cAlpha, transparency=true)
-hp23=meshplot!(ax2, F3, V, strokewidth=0, color=cAlpha, transparency=true)
-Colorbar(fig[1,3],hp21,label = "Displacement magnitude [mm]") 
-
-hSlider2 = Slider(fig[2,2], range = incRange, startvalue = sliderInitialStep,linewidth=30)
-
-on(hSlider2.value) do stepIndex
-    U = DD_disp[stepIndex].data  
-    VN = V .+ U
-    hp21[1] = GeometryBasics.Mesh(VN,Fb)
-    hp21.color = norm.(U)  
-    hp22[1] = GeometryBasics.Mesh(VN,F2)
-    hp23[1] = GeometryBasics.Mesh(VN,F3)
-    ax2.title = "Step: "*string(stepIndex)
-end
-
-slidercontrol(hSlider,ax2)
-
-fig
